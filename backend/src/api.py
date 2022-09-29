@@ -1,12 +1,10 @@
 import os
-from shutil import ExecError
-from urllib import response
 from flask import Flask, request, jsonify, abort
 from sqlalchemy import exc
 import json
 from flask_cors import CORS
 
-from .database.models import setup_db, Drink
+from .database.models import db_drop_and_create_all, setup_db, Drink
 from .auth.auth import AuthError, requires_auth
 
 app = Flask(__name__)
@@ -25,7 +23,7 @@ def after_request(response):
 !! NOTE THIS MUST BE UNCOMMENTED ON FIRST RUN
 !! Running this funciton will add one
 '''
-# db_drop_and_create_all()
+db_drop_and_create_all()
 
 # ROUTES
 '''
@@ -61,9 +59,11 @@ def get_drinks():
 '''
 @app.route('/drinks-detail', methods=['GET'])
 @requires_auth('get:drinks-detail')
-def drink_detail(payload):
+def drink_detail():
     try:
         query = Drink.query.all()
+
+        # print(payload)
         
         drinks = [drink.long() for drink in query]
 
@@ -87,12 +87,12 @@ def drink_detail(payload):
 '''
 @app.route('/drinks', methods=['POST'])
 @requires_auth('post:drinks')
-def create_drink(payload):
+def create_drink():
     try:
         body = request.get_json()
 
         if not('title' in body and 'recipe' in body):
-            abort(400)
+            abort(404)
 
         title = body.get('title', None)
         recipe = json.dumps(body.get('recipe', None))
@@ -124,26 +124,27 @@ def create_drink(payload):
 
 @app.route('/drinks/<int:id>', methods=['PATCH'])
 @requires_auth('patch:drinks')
-def update_drink(payload, id):
+def update_drink(id):
     try:
         body = request.get_json()
-
-        if not('title' in body and 'recipe' in body):
-            abort(404)
 
         query = Drink.query.filter_by(id=id).first()
 
         if not query:
             abort(404)
 
-        query.title = body.get('title')
-        query.recipe = json.dumps(body.get('recipe'))
+        if 'title' in body or 'recipe' in body:
+            query.title = body.get('title')
+            query.recipe = json.dumps(body.get('recipe'))
+        else:
+            abort(404)
+        
 
         query.update()
 
         return jsonify({
             "success":True,
-            "drinks":query.long()
+            "drinks":[query.long()]
         })
     except Exception as e:
         print(e)
@@ -166,7 +167,7 @@ def update_drink(payload, id):
 
 @app.route('/drinks/<int:id>', methods=['DELETE'])
 @requires_auth('delete:drinks')
-def delete_drink(payload, id):
+def delete_drink(id):
     try:
         query = Drink.query.filter_by(id=id).first()
         
